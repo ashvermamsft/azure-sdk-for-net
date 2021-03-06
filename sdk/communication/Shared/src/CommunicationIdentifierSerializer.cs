@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 
 namespace Azure.Communication
@@ -10,43 +11,112 @@ namespace Azure.Communication
     {
         public static CommunicationIdentifier Deserialize(CommunicationIdentifierModel identifier)
         {
-            var id = identifier.Id;
-            var kind = identifier.Kind;
+           string rawId = AssertNotNull(identifier.RawId, nameof(identifier.RawId), nameof(CommunicationIdentifierModel));
 
-            if (kind == CommunicationIdentifierKind.CommunicationUser)
-                return new CommunicationUserIdentifier(AssertNotNull(id, nameof(identifier.Id), kind));
-            if (kind == CommunicationIdentifierKind.CallingApplication)
-                return new CallingApplicationIdentifier(AssertNotNull(id, nameof(identifier.Id), kind));
-            if (kind == CommunicationIdentifierKind.PhoneNumber)
-                return new PhoneNumberIdentifier(AssertNotNull(identifier.PhoneNumber, nameof(identifier.PhoneNumber), kind));
-            if (kind == CommunicationIdentifierKind.MicrosoftTeamsUser)
+            AssertMaximumOneNestedModel(identifier);
+
+            if (identifier.CommunicationUser is CommunicationUserIdentifierModel user)
+                return new CommunicationUserIdentifier(AssertNotNull(user.Id, nameof(user.Id), nameof(CommunicationUserIdentifierModel)));
+
+            if (identifier.PhoneNumber is PhoneNumberIdentifierModel phoneNumber)
             {
-                return new MicrosoftTeamsUserIdentifier(
-                        AssertNotNull(identifier.MicrosoftTeamsUserId, nameof(identifier.MicrosoftTeamsUserId), kind),
-                        AssertNotNull(identifier.IsAnonymous, nameof(identifier.IsAnonymous), kind));
+                return new PhoneNumberIdentifier(
+                    AssertNotNull(phoneNumber.Value, nameof(phoneNumber.Value), nameof(PhoneNumberIdentifierModel)),
+                    AssertNotNull(identifier.RawId, nameof(identifier.RawId), nameof(PhoneNumberIdentifierModel)));
             }
 
-            return new UnknownIdentifier(AssertNotNull(id, nameof(identifier.Id), kind));
+            if (identifier.MicrosoftTeamsUser is MicrosoftTeamsUserIdentifierModel teamsUser)
+            {
+                return new MicrosoftTeamsUserIdentifier(
+                    AssertNotNull(teamsUser.UserId, nameof(teamsUser.UserId), nameof(MicrosoftTeamsUserIdentifierModel)),
+                    AssertNotNull(teamsUser.IsAnonymous, nameof(teamsUser.IsAnonymous), nameof(MicrosoftTeamsUserIdentifierModel)),
+                    Deserialize(AssertNotNull(teamsUser.Cloud, nameof(teamsUser.Cloud), nameof(MicrosoftTeamsUserIdentifierModel))),
+                    rawId);
+            }
+
+            return new UnknownIdentifier(rawId);
+
+            static void AssertMaximumOneNestedModel(CommunicationIdentifierModel identifier)
+            {
+                List<string> presentProperties = new List<string>();
+                if (identifier.CommunicationUser is not null)
+                    presentProperties.Add(nameof(identifier.CommunicationUser));
+                if (identifier.PhoneNumber is not null)
+                    presentProperties.Add(nameof(identifier.PhoneNumber));
+                if (identifier.MicrosoftTeamsUser is not null)
+                    presentProperties.Add(nameof(identifier.MicrosoftTeamsUser));
+
+                if (presentProperties.Count > 1)
+                    throw new JsonException($"Only one of the properties in {{{string.Join(", ", presentProperties)}}} should be present.");
+            }
+        }
+
+        private static CommunicationCloudEnvironment Deserialize(CommunicationCloudEnvironmentModel cloud)
+        {
+            if (cloud == CommunicationCloudEnvironmentModel.Public)
+                return CommunicationCloudEnvironment.Public;
+            if (cloud == CommunicationCloudEnvironmentModel.Gcch)
+                return CommunicationCloudEnvironment.Gcch;
+            if (cloud == CommunicationCloudEnvironmentModel.Dod)
+                return CommunicationCloudEnvironment.Dod;
+
+            return new CommunicationCloudEnvironment(cloud.ToString());
         }
 
         public static CommunicationIdentifierModel Serialize(CommunicationIdentifier identifier)
             => identifier switch
             {
-                CommunicationUserIdentifier u => new CommunicationIdentifierModel(CommunicationIdentifierKind.CommunicationUser) { Id = u.Id },
-                CallingApplicationIdentifier a => new CommunicationIdentifierModel(CommunicationIdentifierKind.CallingApplication) { Id = a.Id },
-                PhoneNumberIdentifier p => new CommunicationIdentifierModel(CommunicationIdentifierKind.PhoneNumber) { PhoneNumber = p.PhoneNumber },
-                MicrosoftTeamsUserIdentifier u => new CommunicationIdentifierModel(CommunicationIdentifierKind.MicrosoftTeamsUser) { MicrosoftTeamsUserId = u.UserId, IsAnonymous = u.IsAnonymous },
-                UnknownIdentifier u => new CommunicationIdentifierModel(CommunicationIdentifierKind.Unknown) { Id = u.Id },
+                CommunicationUserIdentifier u => new CommunicationIdentifierModel
+                {
+                    CommunicationUser = new CommunicationUserIdentifierModel
+                    {
+                        Id = u.Id,
+                    }
+                },
+                PhoneNumberIdentifier p => new CommunicationIdentifierModel
+                {
+                    RawId = p.RawId,
+                    PhoneNumber = new PhoneNumberIdentifierModel
+                    {
+                        Value = p.PhoneNumber,
+                    },
+                },
+                MicrosoftTeamsUserIdentifier u => new CommunicationIdentifierModel
+                {
+                    RawId = u.RawId,
+                    MicrosoftTeamsUser = new MicrosoftTeamsUserIdentifierModel
+                    {
+                        UserId = u.UserId,
+                        IsAnonymous = u.IsAnonymous,
+                        Cloud = Serialize(u.Cloud),
+                    }
+                },
+                UnknownIdentifier u => new CommunicationIdentifierModel
+                {
+                    RawId = u.Id
+                },
                 _ => throw new NotSupportedException(),
             };
 
-        private static T AssertNotNull<T>(T value, string name, CommunicationIdentifierKind kind) where T : class?
-            => value ?? throw new JsonException($"Property '{name}' is required for identifier of kind `{kind}`.");
+        private static CommunicationCloudEnvironmentModel Serialize(CommunicationCloudEnvironment cloud)
+        {
+            if (cloud == CommunicationCloudEnvironment.Public)
+                return CommunicationCloudEnvironmentModel.Public;
+            if (cloud == CommunicationCloudEnvironment.Gcch)
+                return CommunicationCloudEnvironmentModel.Gcch;
+            if (cloud == CommunicationCloudEnvironment.Dod)
+                return CommunicationCloudEnvironmentModel.Dod;
 
-        private static T AssertNotNull<T>(T? value, string name, CommunicationIdentifierKind kind) where T : struct
+            return new CommunicationCloudEnvironmentModel(cloud.ToString());
+        }
+
+        private static T AssertNotNull<T>(T value, string name, string type) where T : class?
+            => value ?? throw new JsonException($"Property '{name}' is required for identifier of type `{type}`.");
+
+        private static T AssertNotNull<T>(T? value, string name, string type) where T : struct
         {
             if (value is null)
-                throw new JsonException($"Property '{name}' is required for identifier of kind `{kind}`.");
+                throw new JsonException($"Property '{name}' is required for identifier of type `{type}`.");
 
             return value.Value;
         }

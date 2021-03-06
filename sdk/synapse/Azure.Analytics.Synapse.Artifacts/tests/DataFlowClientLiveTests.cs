@@ -27,13 +27,13 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
         private DataFlowClient CreateClient()
         {
             return InstrumentClient(new DataFlowClient(
-                new Uri(TestEnvironment.EndpointUrl),
+                TestEnvironment.EndpointUrl,
                 TestEnvironment.Credential,
                 InstrumentClientOptions(new ArtifactsClientOptions())
             ));
         }
 
-        [Test]
+        [RecordedTest]
         public async Task GetDataFlows()
         {
             DataFlowClient client = CreateClient();
@@ -43,7 +43,7 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             Assert.GreaterOrEqual((await dataFlows.ToListAsync()).Count, 1);
         }
 
-        [Test]
+        [RecordedTest]
         public async Task GetDataFlow()
         {
             DataFlowClient client = CreateClient();
@@ -53,7 +53,7 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             Assert.AreEqual (flow.Name, dataFlow.Name);
         }
 
-        [Test]
+        [RecordedTest]
         public async Task RenameDataFlow()
         {
             DataFlowClient client = CreateClient();
@@ -63,16 +63,16 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             string newFlowName = Recording.GenerateAssetName("DataFlow2");
 
             DataFlowRenameDataFlowOperation renameOperation = await client.StartRenameDataFlowAsync (resource.Name, new ArtifactRenameRequest () { NewName = newFlowName } );
-            await renameOperation.WaitForCompletionAsync ();
+            await renameOperation.WaitForCompletionAsync();
 
             DataFlowResource dataFlow = await client.GetDataFlowAsync (newFlowName);
             Assert.AreEqual (newFlowName, dataFlow.Name);
 
             DataFlowDeleteDataFlowOperation operation = await client.StartDeleteDataFlowAsync (newFlowName);
-            await operation.WaitForCompletionAsync ();
+            await operation.WaitForCompletionAsync();
         }
 
-        [Test]
+        [RecordedTest]
         public async Task DeleteDataFlow()
         {
             DataFlowClient client = CreateClient();
@@ -80,15 +80,7 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             DataFlowResource resource = await DisposableDataFlow.CreateResource (client, this.Recording);
 
             DataFlowDeleteDataFlowOperation operation = await client.StartDeleteDataFlowAsync (resource.Name);
-            Response response = await operation.WaitForCompletionAsync ();
-            switch (response.Status) {
-                case 200:
-                case 204:
-                    break;
-                default:
-                    Assert.Fail($"Unexpected status ${response.Status} returned");
-                    break;
-            }
+            await operation.WaitAndAssertSuccessfulCompletion ();
         }
     }
 }

@@ -54,7 +54,7 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             public async ValueTask DisposeAsync()
             {
                 NotebookDeleteNotebookOperation operation = await _client.StartDeleteNotebookAsync (Name);
-                await operation.WaitForCompletionAsync ();
+                await operation.WaitForCompletionAsync();
             }
         }
 
@@ -65,13 +65,13 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
         private NotebookClient CreateClient()
         {
             return InstrumentClient(new NotebookClient(
-                new Uri(TestEnvironment.EndpointUrl),
+                TestEnvironment.EndpointUrl,
                 TestEnvironment.Credential,
                 InstrumentClientOptions(new ArtifactsClientOptions())
             ));
         }
 
-        [Test]
+        [RecordedTest]
         public async Task TestGetNotebook()
         {
             NotebookClient client = CreateClient ();
@@ -89,7 +89,7 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             }
         }
 
-        [Test]
+        [RecordedTest]
         public async Task TestDeleteNotebook()
         {
             NotebookClient client = CreateClient();
@@ -97,18 +97,10 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             NotebookResource resource = await DisposableNotebook.CreateResource (client, this.Recording);
 
             NotebookDeleteNotebookOperation operation = await client.StartDeleteNotebookAsync (resource.Name);
-            Response response = await operation.WaitForCompletionAsync ();
-            switch (response.Status) {
-                case 200:
-                case 204:
-                    break;
-                default:
-                    Assert.Fail($"Unexpected status ${response.Status} returned");
-                    break;
-            }
+            await operation.WaitAndAssertSuccessfulCompletion();
         }
 
-        [Test]
+        [RecordedTest]
         public async Task TestRenameLinkedService()
         {
             NotebookClient client = CreateClient();
@@ -118,17 +110,17 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             string newNotebookName = Recording.GenerateId("Notebook2", 16);
 
             NotebookRenameNotebookOperation renameOperation = await client.StartRenameNotebookAsync (resource.Name, new ArtifactRenameRequest () { NewName = newNotebookName } );
-            await renameOperation.WaitForCompletionAsync ();
+            await renameOperation.WaitForCompletionAsync();
 
             NotebookResource notebook = await client.GetNotebookAsync (newNotebookName);
             Assert.AreEqual (newNotebookName, notebook.Name);
 
             NotebookDeleteNotebookOperation operation = await client.StartDeleteNotebookAsync (newNotebookName);
-            await operation.WaitForCompletionAsync ();
+            await operation.WaitForCompletionAsync();
         }
 
         [Ignore ("https://github.com/Azure/azure-sdk-for-net/issues/18080 - Notebook summary appears to require Synapse.Spark execution first")]
-        [Test]
+        [RecordedTest]
         public async Task TestGetSummary()
         {
             NotebookClient client = CreateClient();

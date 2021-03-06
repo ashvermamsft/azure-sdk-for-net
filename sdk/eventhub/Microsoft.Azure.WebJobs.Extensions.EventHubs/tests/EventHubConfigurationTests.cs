@@ -5,8 +5,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Azure.Messaging.EventHubs;
+using Azure.Messaging.EventHubs.Processor;
 using Microsoft.Azure.WebJobs.EventHubs.Processor;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
+using Microsoft.Azure.WebJobs.Hosting;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
@@ -32,13 +34,57 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         [Test]
         public void ConfigureOptions_AppliesValuesCorrectly()
         {
-            EventHubOptions options = CreateOptions();
+            EventHubOptions options = CreateOptionsFromConfig();
 
             Assert.AreEqual(123, options.MaxBatchSize);
-            Assert.AreEqual(TimeSpan.FromSeconds(33), options.EventProcessorOptions.MaximumWaitTime);
             Assert.AreEqual(true, options.EventProcessorOptions.TrackLastEnqueuedEventProperties);
             Assert.AreEqual(123, options.EventProcessorOptions.PrefetchCount);
-            Assert.AreEqual(true, options.InvokeProcessorAfterReceiveTimeout);
+            Assert.AreEqual(5, options.BatchCheckpointFrequency);
+            Assert.AreEqual(31, options.EventProcessorOptions.PartitionOwnershipExpirationInterval.TotalSeconds);
+            Assert.AreEqual(21, options.EventProcessorOptions.LoadBalancingUpdateInterval.TotalSeconds);
+            Assert.AreEqual("FromEnqueuedTime", options.InitialOffsetOptions.Type);
+            Assert.AreEqual("2020-09-13T12:00Z", options.InitialOffsetOptions.EnqueuedTimeUTC);
+            Assert.AreEqual(5, options.ClientRetryOptions.MaximumRetries);
+            Assert.AreEqual(TimeSpan.FromSeconds(1), options.ClientRetryOptions.Delay);
+            Assert.AreEqual(TimeSpan.FromMinutes(1), options.ClientRetryOptions.MaximumDelay);
+            Assert.AreEqual(TimeSpan.FromSeconds(90), options.ClientRetryOptions.TryTimeout);
+            Assert.AreEqual(EventHubsRetryMode.Fixed, options.ClientRetryOptions.Mode);
+            Assert.AreEqual(EventHubsTransportType.AmqpWebSockets, options.ConnectionOptions.TransportType);
+        }
+
+        [Test]
+        public void ConfigureOptions_Format_Returns_Expected()
+        {
+            EventHubOptions options = CreateOptionsFromConfig();
+
+            string format = ((IOptionsFormatter) options).Format();
+            JObject iObj = JObject.Parse(format);
+            EventHubOptions result = iObj.ToObject<EventHubOptions>();
+
+            Assert.AreEqual(123, result.MaxBatchSize);
+            Assert.AreEqual(5, result.BatchCheckpointFrequency);
+            Assert.True(result.TrackLastEnqueuedEventProperties);
+            Assert.AreEqual(123, result.PrefetchCount);
+            Assert.AreEqual(TimeSpan.FromSeconds(31), result.PartitionOwnershipExpirationInterval);
+            Assert.AreEqual(TimeSpan.FromSeconds(21), result.LoadBalancingUpdateInterval);
+            Assert.AreEqual("FromEnqueuedTime", result.InitialOffsetOptions.Type);
+            Assert.AreEqual("2020-09-13T12:00Z", result.InitialOffsetOptions.EnqueuedTimeUTC);
+            Assert.AreEqual(5, result.ClientRetryOptions.MaximumRetries);
+            Assert.AreEqual(TimeSpan.FromSeconds(1), result.ClientRetryOptions.Delay);
+            Assert.AreEqual(TimeSpan.FromMinutes(1), result.ClientRetryOptions.MaximumDelay);
+            Assert.AreEqual(TimeSpan.FromSeconds(90), result.ClientRetryOptions.TryTimeout);
+            Assert.AreEqual(EventHubsRetryMode.Fixed, result.ClientRetryOptions.Mode);
+            Assert.AreEqual(EventHubsTransportType.AmqpWebSockets, result.ConnectionOptions.TransportType);
+        }
+
+        [Test]
+        public void ConfigureOptions_AppliesValuesCorrectly_BackCompat()
+        {
+            EventHubOptions options = CreateOptionsFromConfigBackCompat();
+
+            Assert.AreEqual(123, options.MaxBatchSize);
+            Assert.AreEqual(true, options.EventProcessorOptions.TrackLastEnqueuedEventProperties);
+            Assert.AreEqual(123, options.EventProcessorOptions.PrefetchCount);
             Assert.AreEqual(5, options.BatchCheckpointFrequency);
             Assert.AreEqual(31, options.EventProcessorOptions.PartitionOwnershipExpirationInterval.TotalSeconds);
             Assert.AreEqual(21, options.EventProcessorOptions.LoadBalancingUpdateInterval.TotalSeconds);
@@ -47,27 +93,53 @@ namespace Microsoft.Azure.WebJobs.EventHubs.UnitTests
         }
 
         [Test]
-        public void ConfigureOptions_Format_Returns_Expected()
+        public void ConfigureOptions_Format_Returns_Expected_BackCompat()
         {
-            EventHubOptions options = CreateOptions();
+            EventHubOptions options = CreateOptionsFromConfigBackCompat();
 
-            string format = options.Format();
+            string format = ((IOptionsFormatter) options).Format();
             JObject iObj = JObject.Parse(format);
             EventHubOptions result = iObj.ToObject<EventHubOptions>();
 
             Assert.AreEqual(123, result.MaxBatchSize);
             Assert.AreEqual(5, result.BatchCheckpointFrequency);
-            Assert.True(result.EventProcessorOptions.TrackLastEnqueuedEventProperties);
-            Assert.True(result.InvokeProcessorAfterReceiveTimeout);
-            Assert.AreEqual(123, result.EventProcessorOptions.PrefetchCount);
-            Assert.AreEqual(TimeSpan.FromSeconds(33), result.EventProcessorOptions.MaximumWaitTime);
-            Assert.AreEqual(TimeSpan.FromSeconds(31), result.EventProcessorOptions.PartitionOwnershipExpirationInterval);
-            Assert.AreEqual(TimeSpan.FromSeconds(21), result.EventProcessorOptions.LoadBalancingUpdateInterval);
+            Assert.True(result.TrackLastEnqueuedEventProperties);
+            Assert.AreEqual(123, result.PrefetchCount);
+            Assert.AreEqual(TimeSpan.FromSeconds(31), result.PartitionOwnershipExpirationInterval);
+            Assert.AreEqual(TimeSpan.FromSeconds(21), result.LoadBalancingUpdateInterval);
             Assert.AreEqual("FromEnqueuedTime", result.InitialOffsetOptions.Type);
             Assert.AreEqual("2020-09-13T12:00Z", result.InitialOffsetOptions.EnqueuedTimeUTC);
         }
 
-        private EventHubOptions CreateOptions()
+        private EventHubOptions CreateOptionsFromConfig()
+        {
+            string extensionPath = "AzureWebJobs:Extensions:EventHubs";
+            var values = new Dictionary<string, string>
+            {
+                { $"{extensionPath}:MaxBatchSize", "123" },
+                { $"{extensionPath}:TrackLastEnqueuedEventProperties", "true" },
+                { $"{extensionPath}:PrefetchCount", "123" },
+                { $"{extensionPath}:BatchCheckpointFrequency", "5" },
+                { $"{extensionPath}:PartitionOwnershipExpirationInterval", "00:00:31" },
+                { $"{extensionPath}:LoadBalancingUpdateInterval", "00:00:21" },
+                { $"{extensionPath}:LoadBalancingStrategy", "0" },
+                { $"{extensionPath}:InitialOffsetOptions:Type", "FromEnqueuedTime" },
+                { $"{extensionPath}:InitialOffsetOptions:EnqueuedTimeUTC", "2020-09-13T12:00Z" },
+                { $"{extensionPath}:ClientRetryOptions:MaximumRetries", "5" },
+                { $"{extensionPath}:ClientRetryOptions:Delay", "00:00:01" },
+                { $"{extensionPath}:ClientRetryOptions:MaxDelay", "00:01:00" },
+                { $"{extensionPath}:ClientRetryOptions:TryTimeout", "00:01:30" },
+                { $"{extensionPath}:ClientRetryOptions:Mode", "0" },
+                { $"{extensionPath}:ConnectionOptions:TransportType", "1" },
+            };
+
+            return TestHelpers.GetConfiguredOptions<EventHubOptions>(b =>
+            {
+                b.AddEventHubs();
+            }, values);
+        }
+
+        private EventHubOptions CreateOptionsFromConfigBackCompat()
         {
             string extensionPath = "AzureWebJobs:Extensions:EventHubs";
             var values = new Dictionary<string, string>

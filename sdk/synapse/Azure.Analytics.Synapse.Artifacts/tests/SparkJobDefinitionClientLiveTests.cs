@@ -19,7 +19,7 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
     /// These tests have a dependency on live Azure services and may incur costs for the associated
     /// Azure subscription.
     /// </remarks>
-    // [Ignore("This test case cannot be automated due to the inability to configure infrastructure to test against.")]
+    [Ignore("Requires upload of zip from https://github.com/Azure-Samples/Synapse/tree/main/Spark/DotNET as samples/net/wordcount/wordcount.zip to associated storage.")]
     public class SparkJobDefinitionClientLiveTests : RecordedTestBase<SynapseTestEnvironment>
     {
         internal class DisposableSparkJobDefinition : IAsyncDisposable
@@ -47,13 +47,13 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
                 SparkJobDefinition jobDefinition = new SparkJobDefinition (new BigDataPoolReference (BigDataPoolReferenceType.BigDataPoolReference, "sparkchhamosyna"), jobProperties);
                 SparkJobDefinitionResource resource = new SparkJobDefinitionResource (jobDefinition);
                 SparkJobDefinitionCreateOrUpdateSparkJobDefinitionOperation createOperation = await client.StartCreateOrUpdateSparkJobDefinitionAsync(jobName, resource);
-                return await createOperation.WaitForCompletionAsync ();
+                return await createOperation.WaitForCompletionAsync();
             }
 
             public async ValueTask DisposeAsync()
             {
                 SparkJobDefinitionDeleteSparkJobDefinitionOperation deleteOperation = await _client.StartDeleteSparkJobDefinitionAsync (Name);
-                await deleteOperation.WaitForCompletionAsync ();
+                await deleteOperation.WaitForCompletionAsync();
             }
         }
 
@@ -64,13 +64,13 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
         private SparkJobDefinitionClient CreateClient()
         {
             return InstrumentClient(new SparkJobDefinitionClient(
-                new Uri(TestEnvironment.EndpointUrl),
+                TestEnvironment.EndpointUrl,
                 TestEnvironment.Credential,
                 InstrumentClientOptions(new ArtifactsClientOptions())
             ));
         }
 
-        [Test]
+        [RecordedTest]
         public async Task TestGetSparkJob()
         {
             SparkJobDefinitionClient client = CreateClient ();
@@ -87,7 +87,7 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             }
         }
 
-        [Test]
+        [RecordedTest]
         public async Task TestDeleteSparkJob()
         {
             SparkJobDefinitionClient client = CreateClient();
@@ -95,18 +95,10 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             SparkJobDefinitionResource resource = await DisposableSparkJobDefinition.CreateResource (client, Recording, TestEnvironment.StorageFileSystemName, TestEnvironment.StorageAccountName);
 
             SparkJobDefinitionDeleteSparkJobDefinitionOperation deleteOperation = await client.StartDeleteSparkJobDefinitionAsync  (resource.Name);
-            Response response = await deleteOperation.WaitForCompletionAsync ();
-            switch (response.Status) {
-                case 200:
-                case 204:
-                    break;
-                default:
-                    Assert.Fail($"Unexpected status ${response.Status} returned");
-                    break;
-            }
+            await deleteOperation.WaitAndAssertSuccessfulCompletion();
         }
 
-        [Test]
+        [RecordedTest]
         public async Task TestRenameSparkJob()
         {
             SparkJobDefinitionClient client = CreateClient();
@@ -116,35 +108,35 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             string newSparkJobName = Recording.GenerateId("Pipeline2", 16);
 
             SparkJobDefinitionRenameSparkJobDefinitionOperation renameOperation = await client.StartRenameSparkJobDefinitionAsync (resource.Name, new ArtifactRenameRequest () { NewName = newSparkJobName } );
-            await renameOperation.WaitForCompletionAsync ();
+            await renameOperation.WaitForCompletionAsync();
 
             SparkJobDefinitionResource sparkJob = await client.GetSparkJobDefinitionAsync (newSparkJobName);
             Assert.AreEqual (newSparkJobName, sparkJob.Name);
 
             SparkJobDefinitionDeleteSparkJobDefinitionOperation deleteOperation = await client.StartDeleteSparkJobDefinitionAsync (newSparkJobName);
-            await deleteOperation.WaitForCompletionAsync ();
+            await deleteOperation.WaitForCompletionAsync();
         }
 
         [Ignore ("https://github.com/Azure/azure-sdk-for-net/issues/18079 - SYNAPSE_API_ISSUE - Parameter name: ClassName")]
-        [Test]
+        [RecordedTest]
         public async Task TestExecute()
         {
             SparkJobDefinitionClient client = CreateClient();
             await using DisposableSparkJobDefinition sparkJobDefinition = await DisposableSparkJobDefinition.Create (client, Recording, TestEnvironment.StorageFileSystemName, TestEnvironment.StorageAccountName);
 
             SparkJobDefinitionExecuteSparkJobDefinitionOperation executeOperation = await client.StartExecuteSparkJobDefinitionAsync(sparkJobDefinition.Name);
-            SparkBatchJob job = await executeOperation.WaitForCompletionAsync ();
+            SparkBatchJob job = await executeOperation.WaitForCompletionAsync();
         }
 
         [Ignore ("https://github.com/Azure/azure-sdk-for-net/issues/18079 - SYNAPSE_API_ISSUE - Causes internal error")]
-        [Test]
+        [RecordedTest]
         public async Task TestDebug()
         {
             SparkJobDefinitionClient client = CreateClient();
             await using DisposableSparkJobDefinition sparkJobDefinition = await DisposableSparkJobDefinition.Create (client, Recording, TestEnvironment.StorageFileSystemName, TestEnvironment.StorageAccountName);
 
             SparkJobDefinitionDebugSparkJobDefinitionOperation debugOperation = await client.StartDebugSparkJobDefinitionAsync(sparkJobDefinition.Resource);
-            SparkBatchJob job = await debugOperation.WaitForCompletionAsync ();
+            SparkBatchJob job = await debugOperation.WaitForCompletionAsync();
         }
     }
 }

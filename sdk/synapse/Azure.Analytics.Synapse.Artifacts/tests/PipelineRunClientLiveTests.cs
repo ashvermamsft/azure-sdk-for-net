@@ -29,7 +29,7 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
         private PipelineClient CreatePipelineClient()
         {
             return InstrumentClient(new PipelineClient(
-                new Uri(TestEnvironment.EndpointUrl),
+                TestEnvironment.EndpointUrl,
                 TestEnvironment.Credential,
                 InstrumentClientOptions(new ArtifactsClientOptions())
             ));
@@ -38,13 +38,13 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
         private PipelineRunClient CreatePipelineRunClient()
         {
             return InstrumentClient(new PipelineRunClient(
-                new Uri(TestEnvironment.EndpointUrl),
+                TestEnvironment.EndpointUrl,
                 TestEnvironment.Credential,
                 InstrumentClientOptions(new ArtifactsClientOptions())
             ));
         }
 
-        [Test]
+        [RecordedTest]
         public async Task TestCancelRun()
         {
             PipelineClient pipelineClient = CreatePipelineClient();
@@ -56,18 +56,10 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             Assert.NotNull(runResponse.RunId);
 
             Response response = await runClient.CancelPipelineRunAsync (runResponse.RunId);
-
-            switch (response.Status) {
-                case 200:
-                case 204:
-                    break;
-                default:
-                    Assert.Fail($"Unexpected status ${response.Status} returned");
-                    break;
-            }
+            response.AssertSuccess();
         }
 
-        [Test]
+        [RecordedTest]
         public async Task TestGet()
         {
             PipelineClient pipelineClient = CreatePipelineClient();
@@ -83,7 +75,7 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             Assert.NotNull (run.Status);
         }
 
-        [Test]
+        [RecordedTest]
         public async Task TestQueryActivity()
         {
             PipelineClient pipelineClient = CreatePipelineClient();
@@ -98,7 +90,7 @@ namespace Azure.Analytics.Synapse.Artifacts.Tests
             Assert.GreaterOrEqual (queryResponse.Value.Count, 1);
         }
 
-        [Test]
+        [RecordedTest]
         public async Task TestQueryRuns()
         {
             PipelineClient pipelineClient = CreatePipelineClient();
